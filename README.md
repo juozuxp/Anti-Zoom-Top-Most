@@ -1,1 +1,1 @@
-# Anti-Zoom-Top-Most
+If you're pissed off by zooms overlay that appears uppon minimizing the zoom's meeting window and insists on being top most (allways on top), this is a small fix which is going to patch out that annoying property of zoom.
