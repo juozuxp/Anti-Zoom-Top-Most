@@ -62,16 +62,61 @@ GeneralErrorCast FindImport32(void* PEBuffer, const char* ImportName, MappedImpo
 	return GENERAL_ERROR_ASSEMBLE(GENERAL_ERROR_HEADER_PEDISECTOR, STATUS_NOT_FOUND) | 1;
 }
 
+static GeneralErrorCast FindExport32(void* PEBuffer, const char* ExportName, void** ExportAddress)
+{
+	if (!PEBuffer)
+		return GENERAL_ERROR_ASSEMBLE(GENERAL_ERROR_HEADER_PEDISECTOR, STATUS_INVALID_PARAMETER_1) | 1;
+	if (!ExportName)
+		return GENERAL_ERROR_ASSEMBLE(GENERAL_ERROR_HEADER_PEDISECTOR, STATUS_INVALID_PARAMETER_2) | 1;
+	if (!ExportAddress)
+		return GENERAL_ERROR_ASSEMBLE(GENERAL_ERROR_HEADER_PEDISECTOR, STATUS_INVALID_PARAMETER_3) | 1;
+
+	*ExportAddress = 0;
+
+	IMAGE_DOS_HEADER* DosHeader;
+	IMAGE_NT_HEADERS32* NTHeaders;
+	IMAGE_OPTIONAL_HEADER32* OptionalHeader;
+	IMAGE_EXPORT_DIRECTORY* ExportDirectory;
+
+	DosHeader = (IMAGE_DOS_HEADER*)PEBuffer;
+	NTHeaders = (IMAGE_NT_HEADERS32*)((char*)PEBuffer + DosHeader->e_lfanew);
+	OptionalHeader = &NTHeaders->OptionalHeader;
+
+	if (!OptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size)
+		return GENERAL_ERROR_ASSEMBLE(GENERAL_ERROR_HEADER_PEDISECTOR, STATUS_MAPPED_FILE_SIZE_ZERO) | 1;
+
+	ExportDirectory = (IMAGE_EXPORT_DIRECTORY*)((char*)PEBuffer + OptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+
+	unsigned long* AddressesOfFunctions = (unsigned long*)((char*)PEBuffer + ExportDirectory->AddressOfFunctions);
+	unsigned long* AddressesOfNames = (unsigned long*)((char*)PEBuffer + ExportDirectory->AddressOfNames);
+	unsigned short* AddressOfOrdinals = (unsigned short*)((char*)PEBuffer + ExportDirectory->AddressOfNameOrdinals);
+
+	for (unsigned long i = 0; i < ExportDirectory->NumberOfNames; i++, AddressesOfNames++, AddressOfOrdinals++)
+	{
+		char* RawExportName = (char*)((char*)PEBuffer + *AddressesOfNames);
+		if (!_stricmp(RawExportName, ExportName))
+		{
+			*ExportAddress = (void*)((char*)PEBuffer + AddressesOfFunctions[*AddressOfOrdinals]);
+			return STATUS_SUCCESS;
+		}
+	}
+	return GENERAL_ERROR_ASSEMBLE(GENERAL_ERROR_HEADER_PEDISECTOR, STATUS_NOT_FOUND) | 1;
+}
+
 int main()
 {
 	HWND ZPToolTip;
 	MODULEENTRY32 USER32;
+	MODULEENTRY32 WIN32U;
 	HANDLE ProcessHandle;
 	IMAGE_SECTION_HEADER* TextSection;
 	MappedImportDescriptor32 NtSetWindowPos;
 
+	void* NtSetWindowPosEx;
+
 	void* ShellLocation;
 	void* User32Dump;
+	void* Win32UDump;
 	unsigned long ProcessID;
 
 	ZPToolTip = FindWindowW(0, L"ZPToolBarParentWnd");
@@ -79,11 +124,15 @@ int main()
 	ProcessHandle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessID);
 
 	FindProcessModuleByNameA(ProcessID, "User32.dll", &USER32);
+	FindProcessModuleByNameA(ProcessID, "Win32u.dll", &WIN32U);
 
 	User32Dump = VirtualAlloc(0, USER32.modBaseSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	Win32UDump = VirtualAlloc(0, WIN32U.modBaseSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	
 	ReadProcessMemory(ProcessHandle, USER32.hModule, User32Dump, USER32.modBaseSize, 0);
+	ReadProcessMemory(ProcessHandle, WIN32U.hModule, Win32UDump, WIN32U.modBaseSize, 0);
 
+	FindExport32(Win32UDump, "NtUserSetWindowPos", &NtSetWindowPosEx);
 	FindImport32(User32Dump, "NtUserSetWindowPos", &NtSetWindowPos);
 	FindSectionByName(User32Dump, ".text", &TextSection);
 
@@ -93,7 +142,7 @@ int main()
 		0x81, 0x7c, 0x24, 0x04, DWORDPTR(((unsigned long long)ZPToolTip)),
 		0x75, 0x08,
 		0xC7, 0x44, 0x24, 0x8, DWORDPTR(0),
-		0xE9, DWORDPTR(((char*)*NtSetWindowPos.FirstThunk) - ((char*)ShellLocation) - 0x17),
+		0xE9, DWORDPTR(((char*)NtSetWindowPosEx - ((char*)Win32UDump) + ((char*)WIN32U.hModule)) - ((char*)ShellLocation) - 0x17),
 	};
 
 	VirtualProtectEx(ProcessHandle, ShellLocation, sizeof(Shell), PAGE_EXECUTE_READWRITE, &ProcessID);
