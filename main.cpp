@@ -139,10 +139,10 @@ int main()
 	ShellLocation = (((char*)USER32.hModule) + TextSection->VirtualAddress + TextSection->Misc.VirtualSize);
 	unsigned char Shell[] =
 	{
-		0x81, 0x7c, 0x24, 0x04, DWORDPTR(((unsigned long long)ZPToolTip)),
-		0x75, 0x08,
-		0xC7, 0x44, 0x24, 0x8, DWORDPTR(0),
-		0xE9, DWORDPTR(((char*)NtSetWindowPosEx - ((char*)Win32UDump) + ((char*)WIN32U.hModule)) - ((char*)ShellLocation) - 0x17),
+		0x81, 0x7c, 0x24, 0x04, DWORDPTR(((unsigned long long)ZPToolTip)), // cmp [esp+0x4],ZPToolTip
+		0x75, 0x08, // jne rel + 0x8
+		0xC7, 0x44, 0x24, 0x8, DWORDPTR(0), // movd [esp+0x8],0
+		0xE9, DWORDPTR(((char*)NtSetWindowPosEx - ((char*)Win32UDump) + ((char*)WIN32U.hModule)) - ((char*)ShellLocation) - 0x17), // jmp NtUserSetWindowPos
 	};
 
 	VirtualProtectEx(ProcessHandle, ShellLocation, sizeof(Shell), PAGE_EXECUTE_READWRITE, &ProcessID);
