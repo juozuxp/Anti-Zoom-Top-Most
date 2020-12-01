@@ -105,4 +105,6 @@ int main()
 	VirtualProtectEx(ProcessHandle, ((char*)USER32.hModule) + (((char*)NtSetWindowPos.FirstThunk) - ((char*)User32Dump)), sizeof(Hijacked), PAGE_READWRITE, &ProcessID);
 	WriteProcessMemory(ProcessHandle, ((char*)USER32.hModule) + (((char*)NtSetWindowPos.FirstThunk) - ((char*)User32Dump)), &Hijacked, sizeof(Hijacked), 0);
 	VirtualProtectEx(ProcessHandle, ((char*)USER32.hModule) + (((char*)NtSetWindowPos.FirstThunk) - ((char*)User32Dump)), sizeof(Hijacked), ProcessID, &ProcessID);
+
+	SetWindowPos(ZPToolTip, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
